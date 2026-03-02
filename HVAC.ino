@@ -1,52 +1,66 @@
 #include <DHT.h>
 
-/* ---------- DHT CONFIG ---------- */
-#define DHTPIN 5
+/* -------- DHT SETTINGS -------- */
+
+
+/* -------- DHT SETTINGS -------- */
+#define DHTPIN 13   // D7 - safe and free
 #define DHTTYPE DHT11
 
 DHT dht(DHTPIN, DHTTYPE);
 
-/* ---------- FAN PWM CONFIG ---------- */
-#define FAN_PIN 25
-#define PWM_CHANNEL 0
-#define PWM_FREQ 5000      // ✅ FIXED: suitable for 5V DC fan
-#define PWM_RES 8          // 0–255
-
-/* ---------- TEMP THRESHOLDS ---------- */
-#define TEMP_MIN 25.0
-#define TEMP_MAX 29.0
-
-int getFanSpeed(float temp) {
-  if (temp < TEMP_MIN) return 0;        // fan OFF
-  if (temp > TEMP_MAX) return 255;      // full speed
-  return map(temp, TEMP_MIN, TEMP_MAX, 80, 255);
-}
+/* -------- L298N PINS -------- */
+#define ENA 5           // Was D1
+#define IN1 4           // Was D2
+#define IN2 0           // Was D3
 
 void setup() {
   Serial.begin(115200);
   dht.begin();
 
-  ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RES);
-  ledcAttachPin(FAN_PIN, PWM_CHANNEL);
+  pinMode(IN1, OUTPUT); 
+  pinMode(IN2, OUTPUT);
+  pinMode(ENA, OUTPUT);
 
-  Serial.println("Smart HVAC – 1 Fan (5V) System Started");
+  // Initialize motor state (Forward)
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  analogWrite(ENA, 0); // Start with fan off
+
+  Serial.println("Smart HVAC System Started");
 }
 
 void loop() {
-  delay(2000);
-
   float temp = dht.readTemperature();
 
   if (isnan(temp)) {
-    Serial.println("DHT read failed!");
+    Serial.println("Failed to read temperature!");
+    delay(2000);
     return;
   }
 
-  int pwmValue = getFanSpeed(temp);
-  ledcWrite(PWM_CHANNEL, pwmValue);
+  int speed;
 
-  Serial.print("Temperature: ");
+  /* --- Improved Speed Logic --- */
+  if (temp < 22) {
+    speed = 0;       // Turn OFF if it's already cool
+  } 
+  else if (temp < 26) {
+    speed = 550;     // Low (Adjusted higher so the motor actually spins)
+  } 
+  else if (temp < 30) {
+    speed = 800;     // Medium
+  } 
+  else {
+    speed = 1023;    // Full Power
+  }
+
+  analogWrite(ENA, speed);
+
+  Serial.print("Temp: ");
   Serial.print(temp);
-  Serial.print(" °C | Fan PWM: ");
-  Serial.println(pwmValue);
+  Serial.print("°C | PWM Duty: ");
+  Serial.println(speed);
+
+  delay(2000); // Wait 2 seconds between readings
 }
